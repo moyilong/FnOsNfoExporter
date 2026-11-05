@@ -123,8 +123,9 @@ func env(k, d string) string {
 	return d
 }
 func detectDB() string {
+	const defaultDB = "/usr/local/apps/@appdata/trim.media/database/trimmedia.db"
 	var paths []string
-	for _, pattern := range []string{"/var/apps/trim.media/meta/trimmedia.db", "/vol*/@appmeta/trim.media/trimmedia.db", "/vol*/@appdata/trim.media/trimmedia.db"} {
+	for _, pattern := range []string{defaultDB, "/var/apps/trim.media/meta/trimmedia.db", "/vol*/@appmeta/trim.media/trimmedia.db", "/vol*/@appdata/trim.media/trimmedia.db"} {
 		p, _ := filepath.Glob(pattern)
 		paths = append(paths, p...)
 	}
@@ -133,7 +134,7 @@ func detectDB() string {
 			return p
 		}
 	}
-	return ""
+	return defaultDB
 }
 func (a *App) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

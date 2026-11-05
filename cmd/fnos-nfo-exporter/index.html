@@ -6,8 +6,8 @@
 </style>
 <header><div><h1>飞牛 NFO 导出器</h1><div class="muted">把现有影视资料保存到视频旁，便于迁移和备份。</div></div><span>本地运行</span></header>
 <section><h2>媒体来源</h2>
-<label for="database">飞牛影视数据库</label><input id="database" placeholder="/vol02/@appmeta/trim.media/trimmedia.db">
-<label for="roots">允许导出的媒体目录（每行一个）</label><textarea id="roots" rows="3" placeholder="/vol02/1000-0-417451a0/电影&#10;/vol02/1000-0-417451a0/电视剧"></textarea>
+<label for="database">飞牛影视数据库</label><input id="database" placeholder="/usr/local/apps/@appdata/trim.media/database/trimmedia.db">
+<label for="roots">允许导出的媒体目录（每行一个，留空导出全部）</label><textarea id="roots" rows="3" placeholder="留空：导出数据库中所有媒体的 NFO；填写目录：仅导出这些目录内的媒体"></textarea>
 <div class="row"><label><input id="enabled" type="checkbox"> 每天自动导出</label><label>NAS 本地时间 <input id="dailyAt" type="time" value="03:00"></label></div>
 <button id="save">保存设置</button><p class="muted">默认只生成缺失 NFO，已有文件保持原样。计划任务在应用运行时生效，关机期间不补跑。</p></section>
 <section><h2>执行任务</h2><button id="preview" class="secondary">预览待导出内容</button><button id="run">立即导出</button><p id="message" role="alert"></p><div id="status">正在连接…</div>

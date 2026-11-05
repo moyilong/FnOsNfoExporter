@@ -20,6 +20,15 @@ func TestDailySchedule(t *testing.T) {
 	}
 }
 func TestSQLiteExportAndReadOnly(t *testing.T) {
+	for _, unrestricted := range []bool{false, true} {
+		name := "configured-roots"
+		if unrestricted {
+			name = "empty-roots"
+		}
+		t.Run(name, func(t *testing.T) { testSQLiteExportAndReadOnly(t, unrestricted) })
+	}
+}
+func testSQLiteExportAndReadOnly(t *testing.T, unrestricted bool) {
 	root := t.TempDir()
 	database := filepath.Join(t.TempDir(), "trimmedia.db")
 	db, e := sql.Open("sqlite", database)
@@ -55,6 +64,9 @@ func TestSQLiteExportAndReadOnly(t *testing.T) {
 		t.Fatal("database is writable")
 	}
 	c := core.Config{Database: database, Roots: []string{root}, DailyAt: "03:00"}
+	if unrestricted {
+		c.Roots = nil
+	}
 	rep, e := core.Export(context.Background(), db, c, true)
 	if e != nil {
 		t.Fatal(e)

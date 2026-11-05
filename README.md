@@ -13,7 +13,7 @@
 - 从 Episode → Season → TV 关系获取剧集信息，使用单集共同目录推导 tvshow.nfo；无法安全确定目录时跳过并报告。非标准目录请先查看预览。
 - 标题、原名、简介、日期、评分、票数、外部 ID、季集编号、演员、导演和 Genre。
 - 默认仅补缺失：已有 NFO 不覆盖，内容一致不改变时间戳。临时文件完整写入后发布；目标同时被其他程序创建时保留对方文件。
-- 媒体必须实际存在且位于配置目录内。解析符号链接检查边界，跳过目标 NFO 符号链接。
+- 媒体必须实际存在；允许导出的媒体目录留空时导出全部，填写时仅导出配置目录内的媒体。解析符号链接检查边界，跳过目标 NFO 符号链接。
 - 控制台管理员登录，配置及上次报告保存在 TRIM_PKGVAR，重启保留。
 - GitHub CI：测试、amd64/arm64 交叉编译、官方 fnpack 打包、tag 自动发布 Release。
 
@@ -23,7 +23,7 @@
 2. 在 Actions artifacts 中下载对应架构 FPK：amd64 用于 x86_64，arm64 用于 ARM64。
 3. 飞牛应用中心手动安装，向导中设置至少 12 字符的控制台密码。
 4. 从应用图标打开控制台（新标签页），或访问 http://NAS_IP:18080。用户名 admin。
-5. 确认自动发现的 trimmedia.db 路径；填写实际媒体目录，一行一个，例如：
+5. 默认优先使用 `/usr/local/apps/@appdata/trim.media/database/trimmedia.db`；确认数据库文件路径。允许导出的媒体目录留空时导出数据库中所有媒体的 NFO；需要限制范围时填写实际媒体目录，一行一个，例如：
 
    /vol02/1000-0-417451a0/电影
    /vol02/1000-0-417451a0/电视剧
@@ -33,7 +33,23 @@
 
 只访问一个真实的 trimmedia.db；同目录 WAL/SHM 必须可用，不要只把活动数据库主文件复制到另一个位置。数据库访问权限与媒体路径权限不足会在任务中报错。自动发现可能选到旧库，请确认路径。
 
-应用需要访问飞牛影视的私有数据库，当前 FPK 以 root 运行；限制导出根目录必须由管理员配置，数据库只读。控制台是独立认证，不自动继承飞牛登录态；默认 HTTP 服务适合可信局域网，远程使用应放在 HTTPS 反向代理后。
+应用需要访问飞牛影视的私有数据库，当前 FPK 以 root 运行；管理员可选配置导出根目录以限制范围，留空不限制媒体目录，数据库只读。控制台是独立认证，不自动继承飞牛登录态；默认 HTTP 服务适合可信局域网，远程使用应放在 HTTPS 反向代理后。
+
+### 控制台账号与密码重设
+
+用户名固定为 `admin`，密码为安装向导中自行设置的密码，没有默认密码，也不是飞牛系统的登录密码。程序只保存 `password.sha256`，不能从中找回原密码。
+
+忘记密码时，先在应用中心停止应用，通过 NAS SSH 使用实际安装的程序路径和应用数据目录执行以下命令，然后在应用中心重新启动。`--data` 必须指向原来的 `TRIM_PKGVAR` 目录（其中应有 `password.sha256`），不能使用新的空目录。
+
+```sh
+read -r -s -p '新控制台密码（至少 12 字符）: ' wizard_password
+echo
+export wizard_password
+/实际安装路径/fnos-nfo-exporter --data /实际应用数据目录 --init
+unset wizard_password
+```
+
+以上命令在 Bash 中运行，需要有应用数据目录的写权限。重设只更新密码文件，保留导出配置和报告；必须重启服务才会加载新密码。
 
 ## 与飞牛扫描的关系
 
@@ -61,10 +77,27 @@ Go 1.23+，纯 Go SQLite 驱动，无 CGO。
     go vet ./...
     go build ./cmd/fnos-nfo-exporter
 
-本地启动前设置 wizard_password 环境变量，再运行：
+Windows 本地构建与启动（在项目根目录的 PowerShell 中执行）：
 
-    go run ./cmd/fnos-nfo-exporter --data ./data --init
-    go run ./cmd/fnos-nfo-exporter --data ./data --listen 127.0.0.1:18080
+```powershell
+go mod tidy
+go build -o ./bin/fnos-nfo-exporter.exe ./cmd/fnos-nfo-exporter
+if ($LASTEXITCODE -ne 0) { throw '构建失败' }
+$env:wizard_password = 'LocalTest123456!'
+./bin/fnos-nfo-exporter.exe --data ./data --init
+if ($LASTEXITCODE -ne 0) { throw '密码初始化失败' }
+Remove-Item Env:wizard_password
+./bin/fnos-nfo-exporter.exe --data ./data --listen 127.0.0.1:18080
+```
+
+打开 http://127.0.0.1:18080，用户名 `admin`，密码 `LocalTest123456!`（仅为本地测试示例，可自行修改）。按 Ctrl+C 停止。后续启动只执行最后一行；再次执行 `--init` 会重设该数据目录的密码。Windows 可测试控制台；实际导出需要配置本机可访问的数据库和媒体路径，NAS 的 `/vol...` 路径应在 NAS 上测试。
+
+Linux / Bash 本地运行：
+
+```sh
+wizard_password='LocalTest123456!' go run ./cmd/fnos-nfo-exporter --data ./data --init
+go run ./cmd/fnos-nfo-exporter --data ./data --listen 127.0.0.1:18080
+```
 
 只读检查数据库：
 

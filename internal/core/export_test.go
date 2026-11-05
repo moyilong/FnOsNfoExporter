@@ -95,6 +95,24 @@ func TestWithinLexicalBoundary(t *testing.T) {
 		t.Fatal("bad path boundary")
 	}
 }
+func TestEmptyRootsAllowsExistingMedia(t *testing.T) {
+	root := t.TempDir()
+	p := filepath.Join(root, "movie.mkv")
+	if err := os.WriteFile(p, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, roots := range [][]string{nil, {}} {
+		if !Allowed(p, roots) || !Allowed(root, roots) {
+			t.Fatal("empty roots must allow existing media and parent directories")
+		}
+		if Allowed(filepath.Join(root, "missing.mkv"), roots) || Allowed("relative.mkv", roots) {
+			t.Fatal("empty roots must not allow missing or relative paths")
+		}
+		if err := Validate(Config{Database: filepath.Join(root, "trimmedia.db"), Roots: roots, DailyAt: "03:00"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func TestValidate(t *testing.T) {
 	c := Config{Database: filepath.Join(t.TempDir(), "trimmedia.db"), Roots: []string{t.TempDir()}, DailyAt: "03:00"}
 	if e := Validate(c); e != nil {

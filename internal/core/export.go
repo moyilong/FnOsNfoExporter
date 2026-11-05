@@ -104,9 +104,6 @@ func Validate(c Config) error {
 	if !filepath.IsAbs(c.Database) || filepath.Base(c.Database) != "trimmedia.db" {
 		return errors.New("数据库必须为 trimmedia.db 的绝对路径")
 	}
-	if len(c.Roots) == 0 {
-		return errors.New("请至少配置一个允许导出的媒体目录")
-	}
 	for _, r := range c.Roots {
 		if !filepath.IsAbs(r) || filepath.Clean(r) == string(filepath.Separator) {
 			return fmt.Errorf("不能使用此媒体根目录: %s", r)
@@ -138,6 +135,10 @@ func Allowed(path string, roots []string) bool {
 	real, e := filepath.EvalSymlinks(path)
 	if e != nil {
 		return false
+	}
+	// Empty roots exports all database media, while still requiring existing absolute paths.
+	if len(roots) == 0 {
+		return true
 	}
 	for _, r := range roots {
 		rr, e := filepath.EvalSymlinks(r)
@@ -343,7 +344,7 @@ func Export(ctx context.Context, db *sql.DB, c Config, dry bool) (Report, error)
 		if strings.HasPrefix(base, "season ") || strings.HasPrefix(base, "season_") {
 			root = filepath.Dir(root)
 		}
-		safe := Allowed(root, c.Roots)
+		safe := filepath.Dir(root) != root && Allowed(root, c.Roots)
 		for _, allowed := range c.Roots {
 			if filepath.Clean(root) == filepath.Clean(allowed) {
 				safe = false
