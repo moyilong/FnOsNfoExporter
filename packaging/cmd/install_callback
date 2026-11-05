@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+umask 077
+mkdir -p "$TRIM_PKGVAR"
+"$TRIM_APPDEST/fnos-nfo-exporter" --data "$TRIM_PKGVAR" --init

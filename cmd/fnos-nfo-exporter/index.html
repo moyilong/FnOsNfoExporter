@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>飞牛 NFO 导出器</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#233449;background:#f3f6fa}body{max-width:1040px;margin:36px auto;padding:0 22px}header{display:flex;align-items:center;justify-content:space-between}h1{font-size:28px;margin-bottom:6px}.muted{color:#607287}section{background:white;padding:24px;border-radius:14px;margin:22px 0;box-shadow:0 3px 20px #253b5610}label{display:block;margin:14px 0 7px}input,textarea{box-sizing:border-box;width:100%;border:1px solid #c7d1df;border-radius:7px;padding:10px;font:inherit}input[type=checkbox]{width:auto}input[type=time]{max-width:160px}button{background:#245fe5;color:white;border:0;padding:11px 18px;border-radius:7px;font:inherit;cursor:pointer;margin:8px 8px 0 0}button.secondary{background:#e8eefb;color:#2450a4}button:disabled{opacity:.45;cursor:wait}.row{display:flex;gap:24px;align-items:center;flex-wrap:wrap}#message{white-space:pre-wrap;color:#b23a21}#status{font-size:15px;line-height:1.8;white-space:pre-wrap}.table{overflow:auto;max-height:430px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:10px;border-bottom:1px solid #e7edf3;text-align:left;word-break:break-all}th{position:sticky;top:0;background:white}footer{color:#607287;font-size:13px}code{font-size:12px}
+</style>
+<header><div><h1>飞牛 NFO 导出器</h1><div class="muted">把现有影视资料保存到视频旁，便于迁移和备份。</div></div><span>本地运行</span></header>
+<section><h2>媒体来源</h2>
+<label for="database">飞牛影视数据库</label><input id="database" placeholder="/vol02/@appmeta/trim.media/trimmedia.db">
+<label for="roots">允许导出的媒体目录（每行一个）</label><textarea id="roots" rows="3" placeholder="/vol02/1000-0-417451a0/电影&#10;/vol02/1000-0-417451a0/电视剧"></textarea>
+<div class="row"><label><input id="enabled" type="checkbox"> 每天自动导出</label><label>NAS 本地时间 <input id="dailyAt" type="time" value="03:00"></label></div>
+<button id="save">保存设置</button><p class="muted">默认只生成缺失 NFO，已有文件保持原样。计划任务在应用运行时生效，关机期间不补跑。</p></section>
+<section><h2>执行任务</h2><button id="preview" class="secondary">预览待导出内容</button><button id="run">立即导出</button><p id="message" role="alert"></p><div id="status">正在连接…</div>
+<div class="table"><table><thead><tr><th>影片</th><th>类型</th><th>结果</th><th>文件路径</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<footer>电影和单集使用视频同名 NFO；可确定剧集目录时生成 tvshow.nfo。首版不复制飞牛私有图片缓存，不重命名视频。</footer>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,body){let r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-NFO-Request':'true'},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());return r.json()}
+async function perform(f){$('message').textContent='';try{await f()}catch(e){$('message').textContent=e.message}}
+$('save').onclick=()=>perform(async()=>{await api('/api/config',{database:$('database').value.trim(),roots:$('roots').value.split('\n').map(s=>s.trim()).filter(Boolean),enabled:$('enabled').checked,dailyAt:$('dailyAt').value});$('message').textContent='已保存';});
+for(const id of ['preview','run'])$(id).onclick=()=>perform(async()=>{await api('/api/run?preview='+(id==='preview'),{});await refresh()});
+const names={pending:'待生成',written:'已生成',exists:'已有文件，跳过',unchanged:'内容一致', 'missing-or-outside-roots':'文件不存在或不在允许目录','ambiguous-show-root':'剧集目录不明确','conflicting-metadata':'路径对应多组元数据','symlink-skipped':'跳过符号链接'};
+async function refresh(){const s=await api('/api/status');for(const id of ['run','preview','save'])$(id).disabled=s.running;
+$('status').textContent=(s.running?'正在处理…':'当前空闲')+'\n上次完成：'+(s.last||'尚未执行')+'\n下次计划：'+(s.next||'未开启')+(s.report?'\n生成 '+s.report.written+' · 跳过/预览 '+s.report.skipped+' · 错误 '+s.report.errors:'')+(s.error?'\n错误：'+s.error:'');
+$('rows').replaceChildren();for(const e of (s.report?.entries||[]).slice(0,500)){const tr=document.createElement('tr');for(const value of [e.title,e.type,names[e.status]||e.status,e.path]){const td=document.createElement('td');td.textContent=value;tr.append(td)}$('rows').append(tr)}}
+perform(async()=>{const c=await api('/api/config');$('database').value=c.database;$('roots').value=(c.roots||[]).join('\n');$('enabled').checked=c.enabled;$('dailyAt').value=c.dailyAt;await refresh()});
+setInterval(()=>perform(refresh),4000);
+</script></html>

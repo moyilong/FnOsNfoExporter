@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+pidfile="$TRIM_PKGVAR/server.pid"
+binary="$TRIM_APPDEST/fnos-nfo-exporter"
+alive() {
+ [ -s "$pidfile" ] || return 1
+ pid=$(cat "$pidfile")
+ case "$pid" in *[!0-9]*|'') return 1;; esac
+ kill -0 "$pid" 2>/dev/null || return 1
+ [ "$(readlink -f "/proc/$pid/exe")" = "$(readlink -f "$binary")" ]
+}
+case "${1:-}" in
+ start)
+  if alive; then exit 0; fi
+  umask 077
+  mkdir -p "$TRIM_PKGVAR"
+  # Keep the previous startup log; task details are persisted separately.
+  [ ! -f "$TRIM_PKGVAR/server.log" ] || mv "$TRIM_PKGVAR/server.log" "$TRIM_PKGVAR/server.previous.log"
+  nohup "$binary" --data "$TRIM_PKGVAR" --listen :18080 >>"$TRIM_PKGVAR/server.log" 2>&1 < /dev/null &
+  echo $! > "$pidfile"
+  sleep 1
+  alive || exit 1
+  ;;
+ stop)
+  if alive; then
+   kill "$pid"
+   n=0
+   while alive && [ "$n" -lt 15 ]; do sleep 1; n=$((n+1)); done
+   if alive; then exit 1; fi
+  fi
+  rm -f "$pidfile"
+  ;;
+ status) if alive; then exit 0; else exit 3; fi;;
+ *) exit 1;;
+esac

@@ -1,0 +1,14 @@
+appname=fnos-nfo-exporter
+version=0.1.0
+display_name=飞牛 NFO 导出器
+desc=从飞牛影视数据库导出电影和剧集 NFO，支持手动预览、立即导出和每日计划。
+platform=x86
+source=thirdparty
+maintainer=moyil
+distributor=moyil
+ctl_stop=true
+desktop_uidir=ui
+desktop_applaunchname=fnos-nfo-exporter.main
+service_port=18080
+checkport=true
+disable_authorization_path=false

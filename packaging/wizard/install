@@ -1,0 +1,1 @@
+[{"stepTitle":"控制台登录","items":[{"type":"tips","helpText":"独立应用：只读访问飞牛影视数据库，在你配置的媒体目录写入缺失 NFO。需要访问其他应用的私有数据库，服务以 root 运行。默认关闭计划任务。"},{"type":"password","field":"wizard_password","label":"控制台密码（用户名：admin）","rules":[{"required":true,"message":"请设置密码"},{"min":12,"message":"至少 12 个字符"}]}]}]

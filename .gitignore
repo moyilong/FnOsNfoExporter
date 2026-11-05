@@ -1,0 +1,14 @@
+/bin/
+/obj/
+/.vs/
+/data/
+/dist/
+/build/
+/.tools/
+/tools/*.exe
+*.db
+*.db-wal
+*.db-shm
+*.fpk
+*.log
+*.sha256
