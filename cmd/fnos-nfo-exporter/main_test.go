@@ -92,4 +92,29 @@ func testSQLiteExportAndReadOnly(t *testing.T, unrestricted bool) {
 	if e != nil || rep.Written != 0 {
 		t.Fatal(rep, e)
 	}
+	writer, e := sql.Open("sqlite", database)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = writer.Exec("UPDATE item SET title='修正后的标题' WHERE guid='m1'")
+	writer.Close()
+	if e != nil {
+		t.Fatal(e)
+	}
+	rep, e = core.Export(context.Background(), db, c, true)
+	if e != nil || rep.Written != 0 || rep.Entries[0].Status != "pending-update" {
+		t.Fatal(rep, e)
+	}
+	rep, e = core.Export(context.Background(), db, c, false)
+	if e != nil || rep.Written != 1 || rep.Entries[0].Status != "updated" {
+		t.Fatal(rep, e)
+	}
+	b, e := os.ReadFile(filepath.Join(root, "a.nfo"))
+	var updated core.NFO
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = xml.Unmarshal(b, &updated); e != nil || updated.Title != "修正后的标题" {
+		t.Fatal(updated, e)
+	}
 }

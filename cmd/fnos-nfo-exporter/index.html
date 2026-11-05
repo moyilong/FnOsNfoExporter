@@ -8,8 +8,8 @@
 <section><h2>媒体来源</h2>
 <label for="database">飞牛影视数据库</label><input id="database" placeholder="/usr/local/apps/@appdata/trim.media/database/trimmedia.db">
 <label for="roots">允许导出的媒体目录（每行一个，留空导出全部）</label><textarea id="roots" rows="3" placeholder="留空：导出数据库中所有媒体的 NFO；填写目录：仅导出这些目录内的媒体"></textarea>
-<div class="row"><label><input id="enabled" type="checkbox"> 每天自动导出</label><label>NAS 本地时间 <input id="dailyAt" type="time" value="03:00"></label></div>
-<button id="save">保存设置</button><p class="muted">默认只生成缺失 NFO，已有文件保持原样。计划任务在应用运行时生效，关机期间不补跑。</p></section>
+<div class="row"><label><input id="enabled" type="checkbox"> 每天自动同步 NFO</label><label>NAS 本地时间 <input id="dailyAt" type="time" value="03:00"></label></div>
+<button id="save">保存设置</button><p class="muted">补充缺失 NFO，并同步本工具生成且未被手工修改的文件；内容不变时不写入。旧版文件及其他来源的文件保留。计划任务在应用运行时生效，关机期间不补跑。</p></section>
 <section><h2>执行任务</h2><button id="preview" class="secondary">预览待导出内容</button><button id="run">立即导出</button><p id="message" role="alert"></p><div id="status">正在连接…</div>
 <div class="table"><table><thead><tr><th>影片</th><th>类型</th><th>结果</th><th>文件路径</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 <footer>电影和单集使用视频同名 NFO；可确定剧集目录时生成 tvshow.nfo。首版不复制飞牛私有图片缓存，不重命名视频。</footer>
@@ -19,9 +19,9 @@ async function api(path,body){let r=await fetch(path,body===undefined?{}:{method
 async function perform(f){$('message').textContent='';try{await f()}catch(e){$('message').textContent=e.message}}
 $('save').onclick=()=>perform(async()=>{await api('/api/config',{database:$('database').value.trim(),roots:$('roots').value.split('\n').map(s=>s.trim()).filter(Boolean),enabled:$('enabled').checked,dailyAt:$('dailyAt').value});$('message').textContent='已保存';});
 for(const id of ['preview','run'])$(id).onclick=()=>perform(async()=>{await api('/api/run?preview='+(id==='preview'),{});await refresh()});
-const names={pending:'待生成',written:'已生成',exists:'已有文件，跳过',unchanged:'内容一致', 'missing-or-outside-roots':'文件不存在或不在允许目录','ambiguous-show-root':'剧集目录不明确','conflicting-metadata':'路径对应多组元数据','symlink-skipped':'跳过符号链接'};
+const names={pending:'待生成','pending-update':'待更新',written:'已生成',updated:'已更新',preserved:'保留手工修改或非本工具文件',exists:'已有文件，跳过',unchanged:'内容一致', 'missing-or-outside-roots':'文件不存在或不在允许目录','ambiguous-show-root':'剧集目录不明确','conflicting-metadata':'路径对应多组元数据','symlink-skipped':'跳过符号链接'};
 async function refresh(){const s=await api('/api/status');for(const id of ['run','preview','save'])$(id).disabled=s.running;
-$('status').textContent=(s.running?'正在处理…':'当前空闲')+'\n上次完成：'+(s.last||'尚未执行')+'\n下次计划：'+(s.next||'未开启')+(s.report?'\n生成 '+s.report.written+' · 跳过/预览 '+s.report.skipped+' · 错误 '+s.report.errors:'')+(s.error?'\n错误：'+s.error:'');
+$('status').textContent=(s.running?'正在处理…':'当前空闲')+'\n上次完成：'+(s.last||'尚未执行')+'\n下次计划：'+(s.next||'未开启')+(s.report?'\n生成/更新 '+s.report.written+' · 跳过/预览 '+s.report.skipped+' · 错误 '+s.report.errors:'')+(s.error?'\n错误：'+s.error:'');
 $('rows').replaceChildren();for(const e of (s.report?.entries||[]).slice(0,500)){const tr=document.createElement('tr');for(const value of [e.title,e.type,names[e.status]||e.status,e.path]){const td=document.createElement('td');td.textContent=value;tr.append(td)}$('rows').append(tr)}}
 perform(async()=>{const c=await api('/api/config');$('database').value=c.database;$('roots').value=(c.roots||[]).join('\n');$('enabled').checked=c.enabled;$('dailyAt').value=c.dailyAt;await refresh()});
 setInterval(()=>perform(refresh),4000);

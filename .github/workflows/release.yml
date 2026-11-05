@@ -45,7 +45,7 @@ jobs:
           IS_TAG: ${{ github.ref_type == 'tag' }}
           ARCH: ${{ matrix.arch }}
         run: |
-          version=0.1.0
+          version=0.1.1
           if [ "$IS_TAG" = true ]; then version="${TAG#v}"; fi
           bash scripts/build-fpk.sh "$ARCH" "$version"
       - uses: actions/upload-artifact@v4

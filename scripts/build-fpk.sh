@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 arch="${1:-amd64}"
-version="${2:-0.1.0}"
+version="${2:-0.1.1}"
 case "$arch" in amd64) platform=x86;; arm64) platform=arm;; *) echo "unsupported architecture"; exit 1;; esac
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]] || { echo "invalid version"; exit 1; }
 mkdir -p build dist

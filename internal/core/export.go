@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"encoding/xml"
@@ -122,7 +123,11 @@ func Validate(c Config) error {
 	return nil
 }
 func DSN(path string) string {
-	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: "mode=ro&_pragma=busy_timeout(5000)&_pragma=query_only(1)"}).String()
+	uriPath := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" && !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	return (&url.URL{Scheme: "file", Path: uriPath, RawQuery: "mode=ro&_pragma=busy_timeout(5000)&_pragma=query_only(1)"}).String()
 }
 func Within(path, root string) bool {
 	rel, e := filepath.Rel(root, path)
@@ -190,20 +195,42 @@ func MakeNFO(r Record, show string, genres []string, actors []Actor, directors [
 	return append(append([]byte(xml.Header), b...), '\n'), e
 }
 
-// No overwrite policy: repeated runs never modify an existing NFO, including user-authored metadata.
-// A same-directory temporary file plus hard link publishes a complete file without clobbering a concurrent writer.
+const managedMarker = "<!-- fnos-nfo-exporter:v1 sha256="
+
+// The XML comment records ownership and a checksum of the exact generated body.
+// Old/unmarked files are never adopted, even when their content matches.
+func managedNFO(data []byte) []byte {
+	return []byte(fmt.Sprintf("%s%s%x -->\n", data, managedMarker, sha256.Sum256(data)))
+}
+
+func unmodifiedNFO(data []byte) bool {
+	i := bytes.LastIndex(data, []byte(managedMarker))
+	return i >= 0 && bytes.Equal(data, managedNFO(data[:i]))
+}
+
+// Create without overwriting; replace only checksum-verified generated files.
 func Publish(path string, data []byte, dry bool) (string, error) {
+	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return "symlink-skipped", nil
+	}
+	data = managedNFO(data)
 	old, e := os.ReadFile(path)
+	updating := e == nil
 	if e == nil {
+		if !unmodifiedNFO(old) {
+			return "preserved", nil
+		}
 		if bytes.Equal(old, data) {
 			return "unchanged", nil
 		}
-		return "exists", nil
 	}
-	if !os.IsNotExist(e) {
+	if e != nil && !os.IsNotExist(e) {
 		return "", e
 	}
 	if dry {
+		if updating {
+			return "pending-update", nil
+		}
 		return "pending", nil
 	}
 	f, e := os.CreateTemp(filepath.Dir(path), ".fnos-nfo-*.tmp")
@@ -226,6 +253,27 @@ func Publish(path string, data []byte, dry bool) (string, error) {
 	}
 	if e = f.Close(); e != nil {
 		return "", e
+	}
+	if updating {
+		// Recheck immediately before replacement to detect edits during generation.
+		st, err := os.Lstat(path)
+		if err != nil {
+			return "", err
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			return "symlink-skipped", nil
+		}
+		current, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		if !bytes.Equal(current, old) {
+			return "preserved", nil
+		}
+		if err = os.Rename(tmp, path); err != nil {
+			return "", err
+		}
+		return "updated", nil
 	}
 	if e = os.Link(tmp, path); e != nil {
 		if os.IsExist(e) {
@@ -384,7 +432,7 @@ func Export(ctx context.Context, db *sql.DB, c Config, dry bool) (Report, error)
 				if err != nil {
 					entry.Status = err.Error()
 					out.Errors++
-				} else if status == "written" {
+				} else if status == "written" || status == "updated" {
 					out.Written++
 				} else {
 					out.Skipped++

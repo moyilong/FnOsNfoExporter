@@ -58,13 +58,53 @@ func TestPublishIdempotentAndPreservesExisting(t *testing.T) {
 	if !old.ModTime().Equal(now.ModTime()) {
 		t.Fatal("rewrote identical file")
 	}
-	s, e = Publish(p, []byte("new"), false)
-	if e != nil || s != "exists" {
+	s, e = Publish(p, []byte("new"), true)
+	if e != nil || s != "pending-update" {
 		t.Fatal(s, e)
 	}
 	b, _ := os.ReadFile(p)
-	if string(b) != "first" {
-		t.Fatal("clobbered existing")
+	if !bytes.Equal(b, managedNFO([]byte("first"))) {
+		t.Fatal("preview changed file")
+	}
+	s, e = Publish(p, []byte("new"), false)
+	if e != nil || s != "updated" {
+		t.Fatal(s, e)
+	}
+	b, _ = os.ReadFile(p)
+	if !bytes.Equal(b, managedNFO([]byte("new"))) {
+		t.Fatal("did not update generated file")
+	}
+	// Simulate an editor changing the body but leaving the ownership comment.
+	manual := bytes.Replace(b, []byte("new"), []byte("manual"), 1)
+	if e = os.WriteFile(p, manual, 0644); e != nil {
+		t.Fatal(e)
+	}
+	for _, dry := range []bool{true, false} {
+		s, e = Publish(p, []byte("latest"), dry)
+		if e != nil || s != "preserved" {
+			t.Fatal(s, e)
+		}
+	}
+	b, _ = os.ReadFile(p)
+	if !bytes.Equal(b, manual) {
+		t.Fatal("clobbered manual edits")
+	}
+}
+
+func TestPublishPreservesUntrackedAndInvalidMarkers(t *testing.T) {
+	for _, content := range [][]byte{[]byte("existing"), []byte("new"), []byte("new" + managedMarker + "invalid -->\n")} {
+		p := filepath.Join(t.TempDir(), "movie.nfo")
+		if err := os.WriteFile(p, content, 0644); err != nil {
+			t.Fatal(err)
+		}
+		status, err := Publish(p, []byte("new"), false)
+		if err != nil || status != "preserved" {
+			t.Fatal(status, err)
+		}
+		got, err := os.ReadFile(p)
+		if err != nil || !bytes.Equal(got, content) {
+			t.Fatal("changed untracked file", err)
+		}
 	}
 }
 func TestAllowedRootBoundary(t *testing.T) {
