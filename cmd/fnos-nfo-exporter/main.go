@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -19,7 +16,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -36,18 +32,17 @@ type State struct {
 	Report  core.Report `json:"report"`
 }
 type App struct {
-	mu       sync.Mutex
-	cfg      core.Config
-	state    State
-	dir      string
-	password string
-	ctx      context.Context
+	mu    sync.Mutex
+	cfg   core.Config
+	state State
+	dir   string
+	ctx   context.Context
 }
 
 func main() {
 	dir := flag.String("data", env("TRIM_PKGVAR", "./data"), "应用数据目录")
 	listen := flag.String("listen", ":18080", "HTTP 地址")
-	init := flag.Bool("init", false, "从 wizard_password 初始化控制台密码")
+	init := flag.Bool("init", false, "初始化应用数据目录（兼容旧安装脚本）")
 	inspect := flag.String("inspect", "", "只读检查 trimmedia.db")
 	flag.Parse()
 	if *inspect != "" {
@@ -66,25 +61,12 @@ func main() {
 	if e := os.MkdirAll(*dir, 0700); e != nil {
 		log.Fatal(e)
 	}
-	passfile := filepath.Join(*dir, "password.sha256")
 	if *init {
-		p := os.Getenv("wizard_password")
-		if len(p) < 12 {
-			log.Fatal("控制台密码至少 12 个字符")
-		}
-		sum := sha256.Sum256([]byte(p))
-		if e := os.WriteFile(passfile, []byte(hex.EncodeToString(sum[:])), 0600); e != nil {
-			log.Fatal(e)
-		}
 		return
-	}
-	hash, e := os.ReadFile(passfile)
-	if e != nil {
-		log.Fatal("请通过安装向导设置控制台密码，或以 wizard_password 环境变量运行 --init")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	a := &App{dir: *dir, password: strings.TrimSpace(string(hash)), ctx: ctx, cfg: core.Config{DailyAt: "03:00", Roots: []string{}}}
+	a := &App{dir: *dir, ctx: ctx, cfg: core.Config{DailyAt: "03:00", Roots: []string{}}}
 	if b, e := os.ReadFile(filepath.Join(*dir, "config.json")); e == nil {
 		if e = json.Unmarshal(b, &a.cfg); e != nil {
 			log.Fatal(e)
@@ -103,7 +85,7 @@ func main() {
 	mux.HandleFunc("/api/config", a.config)
 	mux.HandleFunc("/api/run", a.runHTTP)
 	mux.HandleFunc("/api/status", a.status)
-	server := &http.Server{Addr: *listen, Handler: a.auth(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: *listen, Handler: a.protect(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go a.schedule()
 	go func() {
 		<-ctx.Done()
@@ -136,17 +118,10 @@ func detectDB() string {
 	}
 	return defaultDB
 }
-func (a *App) auth(next http.Handler) http.Handler {
+func (a *App) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		u, p, ok := r.BasicAuth()
-		h := sha256.Sum256([]byte(p))
-		if !ok || u != "admin" || subtle.ConstantTimeCompare([]byte(hex.EncodeToString(h[:])), []byte(a.password)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="NFO Export", charset="UTF-8"`)
-			http.Error(w, "请使用 admin 和安装时的密码登录", 401)
-			return
-		}
 		if r.Method == "POST" {
 			if r.Header.Get("X-NFO-Request") != "true" {
 				http.Error(w, "missing request header", 403)
